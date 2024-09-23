@@ -285,6 +285,52 @@ class mlp_net(nn.Module):
         return state_value, pi
 
 
+class mlp_net_Q(nn.Module):
+    def __init__(self, state_size, num_actions, gamma=0.99):
+        super(mlp_net, self).__init__()
+        self.fc1_v = nn.Linear(state_size, 64)
+        self.fc2_v = nn.Linear(64, 64)
+        self.fc1_a = nn.Linear(state_size, 64)
+        self.fc2_a = nn.Linear(64, 64)
+
+        self.sigma_log = nn.Parameter(torch.zeros(1, num_actions))
+        self.action_mean = nn.Linear(64, num_actions)
+        self.action_mean.weight.data.mul_(0.1)
+        self.action_mean.bias.data.zero_()
+
+        # define layers to output state value
+        self.value = nn.Linear(64, 1)
+        self.value.weight.data.mul_(0.1)
+        self.value.bias.data.zero_()
+
+        # Output layer for the advantage A(s, a)
+        self.advantage = nn.Linear(64, num_actions)
+        self.advantage.weight.data.mul_(0.1)
+        self.advantage.bias.data.zero_()
+
+        # Gamma (discount factor) as a parameter
+        self.gamma = gamma
+
+    def forward(self, x):
+        x_v = torch.tanh(self.fc1_v(x))
+        x_v = torch.tanh(self.fc2_v(x_v))
+        state_value = self.value(x_v)
+
+        # output the policy...
+        x_a = torch.tanh(self.fc1_a(x))
+        x_a = torch.tanh(self.fc2_a(x_a))
+        advantage = self.advantage(x_a)
+
+        mean = self.action_mean(x_a)
+        sigma_log = self.sigma_log.expand_as(mean)
+        sigma = torch.exp(sigma_log)
+        pi = (mean, sigma)
+
+        # Compute Q-value Q(s, a) = A(s, a) + gamma * V(s)
+        q_values = advantage + self.gamma * state_value
+
+        return state_value, pi, q_values
+
 class BMF_actor(nn.Module):
     def __init__(self, input_size, gov_action_dim, house_action_dim, num_agent, log_std_min, log_std_max):
         super(BMF_actor, self).__init__()
